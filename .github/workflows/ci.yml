@@ -122,6 +122,12 @@ jobs:
           name: python-linux
           path: /tmp/python-build
 
+      - name: Upload tar.gz archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-linux-tarball
+          path: /tmp/python-3.11.8-32-bit.tar.gz
+
   release:
     needs: [build-windows, build-linux]
     permissions:
@@ -147,13 +153,19 @@ jobs:
           name: python-linux
           path: ./artifacts/linux
 
+      - name: Download Linux tar.gz
+        uses: actions/download-artifact@v4
+        with:
+          name: python-linux-tarball
+          path: ./artifacts/
+
       - name: Zip artifacts
         run: |
           mkdir -p ./artifacts
           cd ./artifacts
           zip -r python-windows.zip ./windows
           zip -r python-linux.zip ./linux
-          ls -lh *.zip
+          ls -lh *.zip *.tar.gz
 
       - name: Set up Node.js
         uses: actions/setup-node@v3

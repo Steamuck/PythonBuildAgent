@@ -9,7 +9,8 @@
       "path": "@semantic-release/github",
       "assets": [
         "./artifacts/python-linux.zip",
-        "./artifacts/python-windows.zip"
+        "./artifacts/python-windows.zip",
+        "./artifacts/python-3.11.8-32-bit.tar.gz"
       ]
     }
   ]
