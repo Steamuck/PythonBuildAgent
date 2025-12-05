@@ -1,0 +1,16 @@
+{
+  "branches": [
+    "master"
+  ],
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    {
+      "path": "@semantic-release/github",
+      "assets": [
+        "./artifacts/python-linux.zip",
+        "./artifacts/python-windows.zip"
+      ]
+    }
+  ]
+}

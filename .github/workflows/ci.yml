@@ -1,0 +1,168 @@
+name: Python 3.11.8 32-bit Builder
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build Python
+        run: . scripts\build.ps1
+
+      - name: Upload Python artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          include-hidden-files: true
+          name: python-windows
+          path: D:\a\PythonBuildAgent\PythonBuildAgent\Python-3.11.8\python-build
+
+  build-linux:
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            zlib1g-dev:i386 \
+            libncurses5-dev:i386 \
+            libgdbm-dev:i386 \
+            libnss3-dev:i386 \
+            libssl-dev:i386 \
+            libreadline-dev:i386 \
+            libffi-dev:i386 \
+            libbz2-dev:i386 \
+            libsqlite3-dev:i386 \
+            liblzma-dev:i386 \
+            gcc-multilib \
+            g++-multilib \
+            libexpat1-dev:i386 \
+            libuuid1:i386
+
+      - name: Download Python 3.11.8 source
+        run: |
+          echo "Downloading Python 3.11.8 source to $(pwd)"
+          wget https://www.python.org/ftp/python/3.11.8/Python-3.11.8.tgz
+          tar -xf Python-3.11.8.tgz
+
+      - name: Configure and build Python 3.11.8 (32-bit)
+        run: |
+          mkdir -p /tmp/python-build
+          cd Python-3.11.8
+          sudo CFLAGS="-m32" LDFLAGS="-m32" ./configure --prefix=/tmp/python-build --enable-optimizations
+          sudo make -j$(nproc)
+          sudo make altinstall
+
+      - name: Setup installation
+        run: |
+
+          sudo mkdir -p /tmp/python-build/lib/tmp
+          cd /tmp/python-build/lib/tmp
+          sudo ar -x ../libpython3.11.a
+          sudo gcc -m32 -shared -o ../libpython-3.11.8.so *.o
+
+          cd /tmp/python-build/lib
+          sudo rm -rf tmp
+          ls
+
+          # Remove unimportant files that take up lots of space
+          sudo rm -rf /tmp/python-build/lib/python3.11/test/
+          sudo rm -rf /tmp/python-build/lib/python3.11/__pycache__/
+          sudo rm -rf /tmp/python-build/lib/python3.11/config-3.11-x86_64-linux-gnu/
+          sudo rm -rf /tmp/python-build/lib/python3.11/tkinter/
+          sudo rm -rf /tmp/python-build/lib/python3.11/idlelib/
+          sudo rm -rf /tmp/python-build/lib/python3.11/turtledemo/
+
+          # Remove the static library as we've built a shared library
+          sudo rm /tmp/python-build/lib/libpython3.11.a
+
+          # Strip the build binaries to reduce size
+          sudo strip /tmp/python-build/bin/python3.11
+          sudo strip /tmp/python-build/lib/libpython-3.11.8.so
+
+          # Remove extra bin files that are not needed
+          sudo rm /tmp/python-build/bin/python3.11-config
+          sudo rm /tmp/python-build/bin/idle3.11
+          sudo rm /tmp/python-build/bin/pydoc3.11
+          sudo rm /tmp/python-build/bin/pip3.11
+          sudo rm /tmp/python-build/bin/2to3-3.11
+
+          cd /tmp
+          sudo tar -czf python-3.11.8-32-bit.tar.gz ./python-build
+
+      - name: Upload Python 3.11.8 (32-bit) artifact
+        uses: actions/upload-artifact@v4
+        with:
+          include-hidden-files: true
+          name: python-linux
+          path: /tmp/python-build
+
+  release:
+    needs: [build-windows, build-linux]
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: python-windows
+          path: ./artifacts/windows
+
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: python-linux
+          path: ./artifacts/linux
+
+      - name: Zip artifacts
+        run: |
+          zip -r ./artifacts/python-windows.zip ./artifacts/windows
+          zip -r ./artifacts/python-linux.zip ./artifacts/linux
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install Semantic Release
+        run: npm install --save-dev semantic-release @semantic-release/github @semantic-release/exec @semantic-release/changelog @semantic-release/git
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
